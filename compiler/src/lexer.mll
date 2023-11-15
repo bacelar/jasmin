@@ -148,6 +148,7 @@ rule main = parse
   | (size as sw) (signletter as s)                { SWSIZE(mksizesign sw s)  }
   | (vsize as r) (signletter as s) (gensize as g) { SVSIZE(mkvsizesign r s g)}
   | "#"     { SHARP      }
+  | ".["    { DOTLBRACKET}
   | "["     { LBRACKET   }
   | "]"     { RBRACKET   }
   | "{"     { LBRACE     }

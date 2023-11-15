@@ -20,6 +20,7 @@ type typattern = TPBool | TPInt | TPWord | TPArray
 type sop = [ `Op2 of S.peop2 | `Op1 of S.peop1]
 
 type tyerror =
+  | UnsupportedQVar	of A.symbol
   | UnknownVar          of A.symbol
   | UnknownFun          of A.symbol
   | InvalidType         of P.pty * typattern
@@ -92,6 +93,9 @@ let pp_suffix fmt =
 
 let pp_tyerror fmt (code : tyerror) =
   match code with
+  | UnsupportedQVar x ->
+      F.fprintf fmt "qualified name `%s' requires '-mjazz' option" x
+
   | UnknownVar x ->
       F.fprintf fmt "unknown variable: `%s'" x
 
@@ -917,6 +921,12 @@ let combine_flags =
      E.CF_GE Signed; E.CF_GE Unsigned;
      E.CF_GT Signed; E.CF_GT Unsigned]
 
+let expecting_unqual qid =
+  let id = qid.S.pev_var in
+  if qid.S.pev_qual <> []
+  then rs_tyerror ~loc:(L.loc id) (UnsupportedQVar (L.unloc id));    
+  id
+
 let is_combine_flags id =
   List.mem_assoc (L.unloc id) combine_flags
   
@@ -932,7 +942,8 @@ let rec tt_expr pd ?(mode=`AllVar) (env : 'asm Env.env) pe =
   | S.PEInt i ->
     P.Pconst i, P.tint
 
-  | S.PEVar x ->
+  | S.PEVar qx ->
+    let x = expecting_unqual qx in
     let x, ty = tt_var_global mode env x in
     P.Pvar x, ty
 
@@ -940,7 +951,9 @@ let rec tt_expr pd ?(mode=`AllVar) (env : 'asm Env.env) pe =
     let ct, x, e = tt_mem_access ~mode pd env me in
     P.Pload (ct, x, e), P.Bty (P.U ct)
 
-  | S.PEGet (aa, ws, ({ L.pl_loc = xlc } as x), pi, olen) ->
+  | S.PEGet (aa, ws, qx, pi, olen) ->
+    let x = expecting_unqual qx in
+    let xlc = x.pl_loc in
     let x, ty = tt_var_global mode env x in
     let ty, _ = tt_as_array (xlc, ty) in
     let ws = Option.map_default tt_ws (P.ws_of_ty ty) ws in
@@ -1003,7 +1016,8 @@ let rec tt_expr pd ?(mode=`AllVar) (env : 'asm Env.env) pe =
     | exception Not_found -> assert false 
     end
 
-  | S.PECall (id, args) when is_combine_flags id ->
+  | S.PECall (qid, args) when is_combine_flags qid.S.pev_var ->
+    let id = expecting_unqual qid in
     tt_expr ~mode pd env (L.mk_loc (L.loc pe) (S.PECombF(id,args)))
 
   | S.PECall _ ->
@@ -1362,8 +1376,8 @@ let cast_opn ~loc id ws =
 let pexpr_of_plvalue exn l =
   match L.unloc l with
   | S.PLIgnore      -> raise exn
-  | S.PLVar  x      -> L.mk_loc (L.loc l) (S.PEVar x)
-  | S.PLArray(aa,ws,x,e,len)  -> L.mk_loc (L.loc l) (S.PEGet(aa,ws,x,e,len))
+  | S.PLVar  x      -> L.mk_loc (L.loc l) (S.PEVar {S.pev_qual=[]; S.pev_var=x})
+  | S.PLArray(aa,ws,x,e,len)  -> L.mk_loc (L.loc l) (S.PEGet(aa,ws,{S.pev_qual=[]; S.pev_var=x},e,len))
   | S.PLMem(ty,x,e) -> L.mk_loc (L.loc l) (S.PEFetch(ty,x,e))
 
 
@@ -1435,7 +1449,7 @@ let tt_lvalues arch_info env loc (pimp, pls) implicit tys =
           rs_tyerror ~loc (string_error "an ident is expected (default is %s)" i) in
         let mk loc s = 
           let s = L.mk_loc loc s in
-          implicits := (i, L.mk_loc loc (S.PEVar s)) :: !implicits;
+          implicits := (i, L.mk_loc loc (S.PEVar {S.pev_qual=[]; S.pev_var=s})) :: !implicits;
           L.mk_loc loc (S.PLVar s) in
         let a = 
           Annot.ensure_uniq1 ~case_sensitive:false i (Annot.on_attribute ~on_empty:(fun loc nid () -> mk loc nid)
@@ -1589,13 +1603,13 @@ let rec tt_instr arch_info (env : 'asm Env.env) ((annot,pi) : S.pinstr) : 'asm E
     let xi = (L.mk_loc lc x) in
     env, [mk_i (arr_init xi)]
   
-  | S.PIAssign (ls, `Raw, { pl_desc = PECall (f, args); pl_loc = el }, None) ->
+  | S.PIAssign (ls, `Raw, { pl_desc = PECall (qf, args); pl_loc = el }, None) ->
+    let f = expecting_unqual qf in
     if is_combine_flags f then
       let pi = 
         L.mk_loc (L.loc pi) 
           (S.PIAssign (ls, `Raw, L.mk_loc el (S.PECombF(f, args)), None)) in
       tt_instr arch_info env (annot, pi)
-
     else
       let (f,tlvs) = tt_fun env f in
       let _tlvs, tes = f_sig f in
@@ -1880,7 +1894,7 @@ let tt_fundef arch_info (env : 'asm Env.env) loc (pf : S.pfundef) : 'asm Env.env
     { P.f_loc   = loc;
       P.f_annot = process_f_annot pf.pdf_annot;
       P.f_cc    = f_cc;
-      P.f_name  = P.F.mk (L.unloc pf.pdf_name);
+      P.f_name  = P.F.mk (L.unloc pf.S.pdf_name);
       P.f_tyin  = List.map (fun { P.v_ty } -> v_ty) args;
       P.f_args  = args;
       P.f_body  = body;

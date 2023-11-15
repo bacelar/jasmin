@@ -40,6 +40,11 @@ let pp_cc =
 let pp_var fmt x =
   F.fprintf fmt "%s" (L.unloc x)
 
+let pp_qvar fmt qx =
+  if qx.pev_qual <> []
+  then F.fprintf fmt "%a.%a" (pp_list "." pp_var) qx.pev_qual pp_var qx.pev_var
+  else pp_var fmt qx.pev_var
+
 let pp_op2 fmt =
   let f s p = F.fprintf fmt "%s%a" p ptype (string_of_castop s) in
   let ret s = F.fprintf fmt "%s" s in
@@ -145,7 +150,7 @@ let pp_top_annotations fmt annot =
 let rec pp_expr_rec prio fmt pe =
   match L.unloc pe with
   | PEParens e -> pp_expr_rec prio fmt e
-  | PEVar x -> pp_var fmt x
+  | PEVar x -> pp_qvar fmt x
   | PEGet (aa, ws, x, e, len) -> 
     pp_arr_access fmt aa ws x e len
   | PEFetch me -> pp_mem_access fmt me 
@@ -153,7 +158,7 @@ let rec pp_expr_rec prio fmt pe =
     F.fprintf fmt "(%a)[@[%a@]]" pp_svsize vs (pp_list ",@ " pp_expr) es
   | PEBool b -> F.fprintf fmt "%s" (if b then "true" else "false")
   | PEInt i -> F.fprintf fmt "%a" Z.pp_print i
-  | PECall (f, args) -> F.fprintf fmt "%a(%a)" pp_var f (pp_list ", " pp_expr) args
+  | PECall (f, args) -> F.fprintf fmt "%a(%a)" pp_qvar f (pp_list ", " pp_expr) args
   | PECombF (f, args) -> 
     F.fprintf fmt "%a(%a)" pp_var f (pp_list ", " pp_expr) args
   | PEPrim (f, args) -> F.fprintf fmt "%a%a(%a)" sharp () pp_var f (pp_list ", " pp_expr) args
@@ -192,6 +197,16 @@ and pp_ws fmt w = F.fprintf fmt "%a" ptype (string_of_wsize w)
 and pp_expr fmt e = pp_expr_rec Pmin fmt e
 
 and pp_arr_access fmt aa ws x e len= 
+ let pp_olen fmt len = 
+   match len with
+   | None -> ()
+   | Some len -> Format.fprintf fmt " : %a" pp_expr len in
+ F.fprintf fmt "%a%s[%a%a%a%a]" 
+    pp_qvar x 
+    (if aa = Warray_.AAdirect then "." else "")
+    (pp_opt pp_ws) ws (pp_opt pp_space) ws pp_expr e pp_olen len
+
+and pp_arr_access_lv fmt aa ws x e len= 
  let pp_olen fmt len = 
    match len with
    | None -> ()
@@ -248,7 +263,7 @@ let pp_lv fmt x =
   match L.unloc x with
   | PLIgnore -> F.fprintf fmt "_"
   | PLVar x -> pp_var fmt x
-  | PLArray (aa, ws, x, e, len) -> pp_arr_access fmt aa ws x e len
+  | PLArray (aa, ws, x, e, len) -> pp_arr_access_lv fmt aa ws x e len
   | PLMem me -> pp_mem_access fmt me 
 
 let pp_eqop fmt op =

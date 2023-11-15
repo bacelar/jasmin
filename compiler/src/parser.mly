@@ -8,10 +8,15 @@
     | None -> Some (Location.mk_loc (Location.loc s) (CSS(None, Location.unloc s)))
     | _    -> c
 
+  let rec nelist2rcons = function
+    | [] -> assert false
+    | [x] -> ([],x)
+    | x::xs -> let (a,b) = nelist2rcons xs in (x::a,b)
 %}
 
 %token EOF
 
+%token DOTLBRACKET
 %token LBRACKET
 %token RBRACKET
 %token LBRACE
@@ -109,8 +114,15 @@
 %inline ident:
 | x=loc(NID) { x }
 
+%inline qident:
+| qx=separated_nonempty_list(DOT,ident)
+   { let (q,x) = nelist2rcons qx in { pev_qual=q; pev_var=x } }
+
 var:
 | x=ident { x }
+
+qvar:
+| qx=qident { qx }
 
 (* ** Annotations
 * -------------------------------------------------------------------- *)
@@ -245,15 +257,14 @@ arr_access_i:
 | ws=utype? e=pexpr len=arr_access_len? {ws, e, len} 
 
 arr_access:
- | s=DOT?  i=brackets(arr_access_i) {
-   let s = if s = None then Warray_.AAscale else Warray_.AAdirect in
-   s, i }
+ | DOTLBRACKET i=arr_access_i RBRACKET { Warray_.AAdirect, i }
+ | i=brackets(arr_access_i) { Warray_.AAscale, i }
 
 pexpr_r:
-| v=var
+| v=qvar
     { PEVar v }
 
-| v=var i=arr_access 
+| v=qvar i=arr_access 
     { let aa, (ws, e, len) = i in PEGet (aa, ws, v, e, len) }
 
 | TRUE
@@ -283,7 +294,7 @@ pexpr_r:
 | e=parens(pexpr)
     { PEParens e }
 
-| f=var args=parens_tuple(pexpr)
+| f=qvar args=parens_tuple(pexpr)
     { PECall (f, args) }
 
 | f=prim args=parens_tuple(pexpr)
@@ -347,7 +358,7 @@ pinstr_r:
 | x=plvalues o=peqop e=pexpr c=prefix(IF, pexpr)? SEMICOLON
     { PIAssign (x, o, e, c) }
 
-| fc=loc(f=var args=parens_tuple(pexpr) { (f, args) })
+| fc=loc(f=qvar args=parens_tuple(pexpr) { (f, args) })
     c=prefix(IF, pexpr)? SEMICOLON
     { let { Location.pl_loc = loc; Location.pl_desc = (f, args) } = fc in
       PIAssign ((None, []), `Raw, Location.mk_loc loc (PECall (f, args)), c) }

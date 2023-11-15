@@ -153,15 +153,17 @@ module W = Wsize
 
 (* -------------------------------------------------------------------- *)
 
+type qualpident = { pev_qual: pident list; pev_var: pident }
+
 type pexpr_r =
   | PEParens of pexpr
-  | PEVar    of pident
-  | PEGet    of arr_access * wsize option * pident * pexpr * pexpr option
+  | PEVar    of qualpident
+  | PEGet    of arr_access * wsize option * qualpident * pexpr * pexpr option
   | PEFetch  of mem_access
   | PEpack   of svsize * pexpr list
   | PEBool   of bool
   | PEInt    of Z.t
-  | PECall   of pident * pexpr list
+  | PECall   of qualpident * pexpr list
   | PECombF  of pident * pexpr list
   | PEPrim   of pident * pexpr list
   | PEOp1    of peop1 * pexpr

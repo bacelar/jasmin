@@ -1948,7 +1948,11 @@ let rec tt_item arch_info (env : 'asm Env.env) pt : 'asm Env.env =
   | S.Pexec   pf ->
     Env.Exec.push (L.loc pt) (fst (tt_fun env pf.pex_name)).P.f_name pf.pex_mem env
   | S.Prequire (from, fs) ->
-    List.fold_left (tt_file_loc arch_info from) env fs
+    let proc_req e r = let m = r.S.preq_module in
+                       match r.S.preq_qual, r.S.preq_with with
+                       | None, None -> tt_file_loc arch_info from e m
+                       | _, _ -> rs_tyerror ~loc:(L.loc m) (string_error "'as' and 'with' clauses in imports only supported in '-mjazz' mode")
+    in List.fold_left proc_req env fs
 
 and tt_file_loc arch_info from env fname =
   fst (tt_file arch_info env from (Some (L.loc fname)) (L.unloc fname))

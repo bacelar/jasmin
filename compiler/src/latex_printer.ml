@@ -380,19 +380,61 @@ let pp_global fmt { pgd_type ; pgd_name ; pgd_val } =
 let pp_path fmt s =
   F.fprintf fmt "%S " (L.unloc s)
 
+let pp_modsig fmt msig =
+  let pp_modsigparam fmp p =
+    indent fmt 1;
+    match p with
+    | PMparam (t,i) -> F.fprintf fmt "%a %a %a;" kw "param" pp_type t dname (L.unloc i)
+    | PMglob (t,i) -> F.fprintf fmt "%a %a %a;" kw "global" pp_type t dname (L.unloc i)
+    | PMfn (f,targ,[]) -> F.fprintf fmt "%a %a (%a);" kw "fn" dname (L.unloc f) (pp_list ", " pp_type) targ
+    | PMfn (f,targ,tres) -> F.fprintf fmt "%a %a (%a) -> %a;" kw "fn" dname (L.unloc f) (pp_list ", " pp_type) targ (pp_list ", " pp_type) tres
+  in F.fprintf fmt "%a " kw "modsignature";
+     pp_inbraces 0 (pp_list eol pp_modsigparam) fmt msig;
+     F.fprintf fmt eol
+     
+
+
+
+let pp_require fmt (from,ms) =
+  let pp_from fmt =
+      Option.may (fun name ->
+          F.fprintf fmt "%a %s " kw "from" (L.unloc name))
+  and pp_as fmt =
+      Option.may (fun name ->
+          F.fprintf fmt "%a %s " kw "as" (L.unloc name))
+  and pp_with fmt =
+      Option.may (fun kvals ->
+          F.fprintf fmt eol;
+          indent fmt 1;
+          F.fprintf fmt "%a " kw "with";
+          pp_inbraces 1 (pp_list eol (fun fmt (p,v)->indent fmt 2; F.fprintf fmt "%a=%a" dname (L.unloc p) dname (L.unloc v))) fmt kvals)
+  in
+  F.fprintf fmt "%a%a " pp_from from kw "require";
+  List.iter
+   (fun m -> pp_path fmt m.preq_module;
+             pp_as fmt m.preq_qual;
+             pp_with fmt m.preq_with) ms;
+  F.fprintf fmt eol
+
 let pp_pitem fmt pi =
   match L.unloc pi with
   | PFundef f -> pp_fundef fmt f
   | PParam p  -> pp_param fmt p
   | PGlobal g -> pp_global fmt g
   | Pexec _   -> ()
-  | Prequire (from, s) ->
+  | Prequire (from, s) -> pp_require fmt (from, s)
+(*
     let pp_from fmt =
       Option.may (fun name ->
           F.fprintf fmt "%a %s " kw "from" (L.unloc name)) in
       F.fprintf fmt "%a%a " pp_from from kw "require";
-      List.iter (pp_path fmt) s;
+      List.iter (fun m -> pp_path fmt m.preq_module) s;
       F.fprintf fmt eol
+*)
 
-let pp_prog fmt =
-  List.iter (F.fprintf fmt "%a" pp_pitem)
+let pp_prog fmt p =
+  List.iter (F.fprintf fmt "%a" pp_pitem) p
+
+let pp_module fmt p =
+  if p.pmod_modsig <> [] then pp_modsig fmt p.pmod_modsig;
+  pp_prog fmt p.pmod_prog

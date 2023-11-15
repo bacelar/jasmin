@@ -43,6 +43,9 @@
     "param" , PARAM  ;
     "ptr"   , POINTER;
     "reg"   , REG    ;
+    "modsignature", MODSIGNATURE;
+    "as"    , AS     ;
+    "with"  , WITH   ;
     "require", REQUIRE;
     "return", RETURN ;
     "stack" , STACK  ;

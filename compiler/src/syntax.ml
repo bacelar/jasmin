@@ -274,7 +274,17 @@ type pexec = {
 }
 
 (* -------------------------------------------------------------------- *)
-type prequire = string L.located
+type prequire = {
+  preq_module: string L.located;
+  preq_qual: string L.located option;
+  preq_with: (string L.located * string L.located) list option;
+}
+
+(* -------------------------------------------------------------------- *)
+type modsigentry =
+  | PMparam of ptype * string L.located
+  | PMglob of ptype * string L.located
+  | PMfn of string L.located * ptype list * ptype list
 
 (* -------------------------------------------------------------------- *)
 type pitem =
@@ -286,3 +296,8 @@ type pitem =
 
 (* -------------------------------------------------------------------- *)
 type pprogram = pitem L.located list
+
+type pmodule = {
+  pmod_modsig: modsigentry list;
+  pmod_prog: pprogram;
+}

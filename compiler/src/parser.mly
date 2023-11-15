@@ -61,7 +61,10 @@
 %token QUESTIONMARK
 %token RARROW
 %token REG
+%token MODSIGNATURE
 %token REQUIRE
+%token AS
+%token WITH
 %token RETURN
 %token ROR
 %token ROL
@@ -96,6 +99,10 @@
 %type <Syntax.pprogram> module_
 
 %start module_
+
+%type <Syntax.pmodule> pmodule_
+
+%start pmodule_
 
 %%
 
@@ -470,14 +477,37 @@ range:
 | ptr=INT COLON size=INT { ptr, size }
 
 (* -------------------------------------------------------------------- *)
+pmodsigentry:
+| PARAM pms_type=ptype id=ident SEMICOLON
+    { Syntax.PMparam (pms_type, id) }
+| GLOBAL pms_type=ptype id=ident SEMICOLON
+    { Syntax.PMglob (pms_type, id) }
+| FN f=ident args=parens(tuple(ptype)) RARROW rty=tuple(ptype) SEMICOLON
+    { Syntax.PMfn (f,args,rty) }
+
+pmodsignature:
+| MODSIGNATURE ps=braces(nonempty_list(pmodsigentry))
+    { ps }
+
 prequire1:
-| s=loc(STRING) { s }
+| s=loc(STRING) { { preq_module = s; preq_qual = None; preq_with = None } }
 
 from:
 | FROM id=ident { id }
 
+pas:
+| AS id=ident { id }
+
+pwithclause:
+| pname=ident EQ pval=ident SEMICOLON
+   { pname, pval }
+
+pwith:
+| WITH w=braces(nonempty_list(pwithclause)) { w }
+
 prequire:
-| f=from? REQUIRE x=nonempty_list(prequire1) { f, x }
+| f=from? REQUIRE x=prequire1 xs=nonempty_list(prequire1) { f, (x::xs) }
+| f=from? REQUIRE x=loc(STRING) a=pas? w=pwith? { f, [{ preq_module = x; preq_qual = a; preq_with = w }] }
 
 (* -------------------------------------------------------------------- *)
 top:
@@ -486,11 +516,19 @@ top:
 | x=pglobal  { Syntax.PGlobal x }
 | x=pexec    { Syntax.Pexec   x }
 | x=prequire { Syntax.Prequire x}
+
 (* -------------------------------------------------------------------- *)
 module_:
 | pfs=loc(top)* EOF
     { pfs }
+| error
+   { Syntax.parse_error (Location.make $startpos $endpos) }
 
+pmodule_:
+| msig=pmodsignature pfs=loc(top)* EOF
+    { { pmod_modsig = msig; pmod_prog = pfs } }
+| pfs=loc(top)* EOF
+    { { pmod_modsig = []; pmod_prog = pfs } }
 | error
    { Syntax.parse_error (Location.make $startpos $endpos) }
 

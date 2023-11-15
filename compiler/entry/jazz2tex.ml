@@ -12,16 +12,27 @@ let parse_and_print arch call_conv =
                 : J.Arch_full.Core_arch)
             | CortexM ->
                 (module J.CoreArchFactory.Core_arch_ARM : J.Arch_full.Core_arch))) in
-  fun output file ->
-    let _, _, ast = J.Compile.parse_file A.arch_info file in
-    let out, close =
-      match output with
-      | None -> (stdout, ignore)
-      | Some latexfile -> (open_out latexfile, close_out)
-    in
-    let fmt = Format.formatter_of_out_channel out in
-    Format.fprintf fmt "%a@." J.Latex_printer.pp_prog ast;
-    close out
+  fun output file mjazz ->
+    if mjazz
+    then let ast = J.Parseio.parse_module ~name:file in
+         let ast = BatFile.with_file_in file ast in
+         let out, close =
+          match output with
+          | None -> (stdout, ignore)
+          | Some latexfile -> (open_out latexfile, close_out)
+         in
+         let fmt = Format.formatter_of_out_channel out in
+         Format.fprintf fmt "%a@." J.Latex_printer.pp_module ast;
+         close out
+    else let _, _, ast = J.Compile.parse_file A.arch_info file in
+         let out, close =
+          match output with
+          | None -> (stdout, ignore)
+          | Some latexfile -> (open_out latexfile, close_out)
+         in
+         let fmt = Format.formatter_of_out_channel out in
+         Format.fprintf fmt "%a@." J.Latex_printer.pp_prog ast;
+         close out
 
 open Cmdliner
 
@@ -54,6 +65,10 @@ let call_conv =
     & opt call_conv J.Glob_options.Linux
     & info [ "call-conv"; "cc" ] ~docv:"OS" ~doc)
 
+let mjazz =
+  let doc = "Parse modular features ('-mjazz' flag in 'jasminc')" in
+  Arg.(value & flag & info ["m"; "M"; "modular"] ~doc)
+
 let () =
   let doc = "Pretty-print Jasmin source programs into LATEX" in
   let man =
@@ -67,5 +82,5 @@ let () =
   let info =
     Cmd.info "jazz2tex" ~version:J.Glob_options.version_string ~doc ~man
   in
-  Cmd.v info Term.(const parse_and_print $ arch $ call_conv $ output $ file)
+  Cmd.v info Term.(const parse_and_print $ arch $ call_conv $ output $ file $ mjazz)
   |> Cmd.eval |> exit

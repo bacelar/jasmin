@@ -101,10 +101,6 @@
 %left STAR SLASH PERCENT
 %nonassoc BANG 
 
-%type <Syntax.pprogram> module_
-
-%start module_
-
 %type <Syntax.pmodule> pmodule_
 
 %start pmodule_

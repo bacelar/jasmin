@@ -20,7 +20,8 @@ type typattern = TPBool | TPInt | TPWord | TPArray
 type sop = [ `Op2 of S.peop2 | `Op1 of S.peop1]
 
 type tyerror =
-  | UnsupportedQVar	of A.symbol
+  | UnexpectedQVar	of A.symbol
+  | UnexpectedMJazz	of A.symbol
   | UnknownVar          of A.symbol
   | UnknownFun          of A.symbol
   | InvalidType         of P.pty * typattern
@@ -93,8 +94,11 @@ let pp_suffix fmt =
 
 let pp_tyerror fmt (code : tyerror) =
   match code with
-  | UnsupportedQVar x ->
-      F.fprintf fmt "qualified name `%s' requires '-mjazz' option" x
+  | UnexpectedQVar x ->
+      F.fprintf fmt "unexpected use of qualified name `%s' ('-mjazz' option?)" x
+
+  | UnexpectedMJazz x ->
+      F.fprintf fmt "unexpected '-mjazz' feature importing module `%s'" x
 
   | UnknownVar x ->
       F.fprintf fmt "unknown variable: `%s'" x
@@ -421,6 +425,27 @@ end = struct
 end
 
 (* -------------------------------------------------------------------- *)
+(* Checking for unexpected "modular" features *)
+let expecting_plain_var qid =
+  let id = qid.S.pev_var in
+  if qid.S.pev_qual <> []
+  then rs_tyerror ~loc:(L.loc id) (UnexpectedQVar (L.unloc id));    
+  id
+
+let expecting_plain_require req =
+  let m = req.S.preq_module in
+  match req.S.preq_qual, req.S.preq_with with
+  | None, None -> m
+  | _, _ -> rs_tyerror ~loc:(L.loc m) (UnexpectedMJazz (L.unloc m))
+
+let expecting_plain_pprogram fname ast =
+  let prog = ast.S.pmod_prog in
+  match ast.S.pmod_modsig with
+  | [] -> prog
+  | _ -> hierror ~loc:Lnone ~kind:"compilation" "Unexpected parametric module found in '%s' (missing '-mjazz'?)" fname
+
+(* -------------------------------------------------------------------- *)
+
 let tt_ws (ws : A.wsize) = Printer.ws_of_ws ws
 
 (* -------------------------------------------------------------------- *)
@@ -921,12 +946,6 @@ let combine_flags =
      E.CF_GE Signed; E.CF_GE Unsigned;
      E.CF_GT Signed; E.CF_GT Unsigned]
 
-let expecting_unqual qid =
-  let id = qid.S.pev_var in
-  if qid.S.pev_qual <> []
-  then rs_tyerror ~loc:(L.loc id) (UnsupportedQVar (L.unloc id));    
-  id
-
 let is_combine_flags id =
   List.mem_assoc (L.unloc id) combine_flags
   
@@ -943,7 +962,7 @@ let rec tt_expr pd ?(mode=`AllVar) (env : 'asm Env.env) pe =
     P.Pconst i, P.tint
 
   | S.PEVar qx ->
-    let x = expecting_unqual qx in
+    let x = expecting_plain_var qx in
     let x, ty = tt_var_global mode env x in
     P.Pvar x, ty
 
@@ -952,7 +971,7 @@ let rec tt_expr pd ?(mode=`AllVar) (env : 'asm Env.env) pe =
     P.Pload (ct, x, e), P.Bty (P.U ct)
 
   | S.PEGet (aa, ws, qx, pi, olen) ->
-    let x = expecting_unqual qx in
+    let x = expecting_plain_var qx in
     let xlc = x.pl_loc in
     let x, ty = tt_var_global mode env x in
     let ty, _ = tt_as_array (xlc, ty) in
@@ -1017,7 +1036,7 @@ let rec tt_expr pd ?(mode=`AllVar) (env : 'asm Env.env) pe =
     end
 
   | S.PECall (qid, args) when is_combine_flags qid.S.pev_var ->
-    let id = expecting_unqual qid in
+    let id = expecting_plain_var qid in
     tt_expr ~mode pd env (L.mk_loc (L.loc pe) (S.PECombF(id,args)))
 
   | S.PECall _ ->
@@ -1604,7 +1623,7 @@ let rec tt_instr arch_info (env : 'asm Env.env) ((annot,pi) : S.pinstr) : 'asm E
     env, [mk_i (arr_init xi)]
   
   | S.PIAssign (ls, `Raw, { pl_desc = PECall (qf, args); pl_loc = el }, None) ->
-    let f = expecting_unqual qf in
+    let f = expecting_plain_var qf in
     if is_combine_flags f then
       let pi = 
         L.mk_loc (L.loc pi) 
@@ -1962,10 +1981,8 @@ let rec tt_item arch_info (env : 'asm Env.env) pt : 'asm Env.env =
   | S.Pexec   pf ->
     Env.Exec.push (L.loc pt) (fst (tt_fun env pf.pex_name)).P.f_name pf.pex_mem env
   | S.Prequire (from, fs) ->
-    let proc_req e r = let m = r.S.preq_module in
-                       match r.S.preq_qual, r.S.preq_with with
-                       | None, None -> tt_file_loc arch_info from e m
-                       | _, _ -> rs_tyerror ~loc:(L.loc m) (string_error "'as' and 'with' clauses in imports only supported in '-mjazz' mode")
+    let proc_req e r = let m = expecting_plain_require r in
+                       tt_file_loc arch_info from e m
     in List.fold_left proc_req env fs
 
 and tt_file_loc arch_info from env fname =
@@ -1977,6 +1994,7 @@ and tt_file arch_info env from loc fname =
   | Some(env, fname) ->
     let ast   = Parseio.parse_program ~name:fname in
     let ast   = BatFile.with_file_in fname ast in
+    let ast   = expecting_plain_pprogram fname ast in
     let env   = List.fold_left (tt_item arch_info) env ast in
     Env.exit_file env, ast
 

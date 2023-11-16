@@ -438,14 +438,6 @@ let pp_pitem fmt pi =
   | PGlobal g -> pp_global fmt g
   | Pexec _   -> ()
   | Prequire (from, s) -> pp_require fmt (from, s)
-(*
-    let pp_from fmt =
-      Option.may (fun name ->
-          F.fprintf fmt "%a %s " kw "from" (L.unloc name)) in
-      F.fprintf fmt "%a%a " pp_from from kw "require";
-      List.iter (fun m -> pp_path fmt m.preq_module) s;
-      F.fprintf fmt eol
-*)
 
 let pp_prog fmt p =
   List.iter (F.fprintf fmt "%a" pp_pitem) p

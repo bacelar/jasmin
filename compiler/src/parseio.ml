@@ -11,9 +11,4 @@ let lexbuf_from_function = fun name f ->
 let parse_program ?(name = "") (inc : IO.input) =
   let lexbuf = lexbuf_from_function name @@ fun buf n ->
   try IO.input inc buf 0 n with IO.No_more_input -> 0 in
-  Parser.module_ Lexer.main lexbuf
-
-let parse_module ?(name = "") (inc : IO.input) =
-  let lexbuf = lexbuf_from_function name @@ fun buf n ->
-  try IO.input inc buf 0 n with IO.No_more_input -> 0 in
   Parser.pmodule_ Lexer.main lexbuf

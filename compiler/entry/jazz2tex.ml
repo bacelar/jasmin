@@ -14,7 +14,7 @@ let parse_and_print arch call_conv =
                 (module J.CoreArchFactory.Core_arch_ARM : J.Arch_full.Core_arch))) in
   fun output file mjazz ->
     if mjazz
-    then let ast = J.Parseio.parse_module ~name:file in
+    then let ast = J.Parseio.parse_program ~name:file in
          let ast = BatFile.with_file_in file ast in
          let out, close =
           match output with

@@ -19,7 +19,7 @@ handle the following additional syntactic constructs:
     }
 	```
  2. an extended `require` clause, allowing the qualification of the
-    import (`as <name>`) and the instantiation of module parameters
+    import (`as <name>`), and the instantiation of module's parameters
     (`with { p1=id1; ...; pn=idn; }`). An example would be:
 	```
 	param int nlimbs = 10;
@@ -195,7 +195,7 @@ if we consider a big-number library parameterised by the size, we
 would not be able to use it to operate on two domains of different
 sizes. On the upside, it would be much simpler to implement (e.g. the
 compiler won't need to manage the cloning and renaming needed to
-support multiple instances of some definition...).
+support multiple instances of the same parametric definition...).
 
 If we consider that allowing a single definition of each symbol is too
 restrictive, then we need to devise a mechanism to allow access to
@@ -205,13 +205,10 @@ symbol. But that would be clearly inconvenient -- notice that,
 returning to the example presented above, module `A` accesses `fd`
 through intermediate modules, thus "hiding" the constituents of the
 full identifier for `fd`.
-
-## Use of qualifiers to disambiguate different instantiations:
-
 A more conveniente (and standard) approach is to introduce
 **qualifiers** to disambiguate between different objects. When
-importing a module, it **can** be assigned to a qualifier that would
-give access to the symbols defined on it.
+importing a module. A module **can** be assigned to a qualifier that would
+give access to the symbols defined on it (possibly, in sub-modules).
 
 ```
 // MODULE D(P)
@@ -239,12 +236,23 @@ require C as QC
 different objects -- they might end up being identified (e.g. if `B.P1`
 equals `C.P2`).
 
+**Remark:** In order to retain compatibility with (standard) Jasmin
+compiler, we drop the qualifier portion of *full-identifiers* for objects
+defined in non-parametric modules (otherwise, we would need to embed the
+module identifier in symbols defined on it, as we need to do with parametrised
+modules). Of course, that means that qualified imports of non-parametric modules
+are useless, as name-clashes won't be avoided.
+<!--
 **Remark:** In order to preserve compatibility with (standard) Jasmin
 compiler, we restrict the use of qualifiers to parametric
 modules. Otherwise, we might need to embed a module identifier in the
 symbols of a given module (as we need to do with parametrised
-modules). Of course, that means that name-clashes on non-parametric
-modules won't be avoidable.
+modules). Another way of saying it is to state that we identify
+full-identifiers of symbols defined on non-parametric modules with
+their non-qualified form. Of course, that means that name-clashes on
+non-parametric modules won't be avoidable
+-->
+
 
 # Processing phases for the prototype (sketch)
 

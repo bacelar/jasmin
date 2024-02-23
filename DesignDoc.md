@@ -39,6 +39,19 @@ handle the following additional syntactic constructs:
 	x = BN.mulU( x, BN.glob_P);
 	```
 
+**Remark:** Parametric modules **should** always be imported instantiating the
+complete set of parameters (a complete `with` clause), as specified in
+the `modsignature` declaration of the imported module (but possibly
+with own parameters...).
+
+**Remark:** require clauses **can** also qualify the import, in which
+case definitions would be accessed through qualified
+identifiers. Notice however that qualifiers are used to disambiguate
+the use of identifiers -- they do not enforce, *per se*, different
+clones of the objects. In this regard, they differ from the
+*namespaces* mechanism (see discussion bellow...).
+
+
 # Uses of `jasminc -mjazz ...`
 
 There are two "modes" of operation when invoking `jasminc -mjazz`:
@@ -55,18 +68,24 @@ There are two "modes" of operation when invoking `jasminc -mjazz`:
 
 ## Context of inner-modules
 
-Each module (parametric or not) is assumed to be interpreted in a
-empty context. This is a departure from "plain" Jasmin programs,
-where `require` clauses could be used to import modules depending on
+Each module (parametric or not) **is assumed to be interpreted in an
+empty context**. This is a departure from "plain" Jasmin programs,
+where `require` clauses can be used to import modules depending on
 some previous declarations [in fact, a typical design-pattern used to
 emulate parametric modules in plain Jasmin...].
 
 Of course, this means that `jasminc -mjazz` **is not** backwards
 compatible with plain `jasminc`. On the other hand, the whole point of
 designing modules is to take a more structured approach for those
-awkward code patterns that are often difficult to reason about.
+awkward code-patterns that are often difficult to reason about.
 
-# Fully-qualified identifiers
+
+# Full-identifiers
+
+The idea behind the handling of the proposed modular features is to
+inline and expand all definitions of (possibly parametric) modules,
+resolving all uses of *identifiers* in what we call
+**full-identifiers**. 
 
 ## Diamond imports and name-clashes
 
@@ -76,71 +95,85 @@ safely merged. As an example, consider the following diamond-shaped
 sequence of imports:
 
 ```
-//D:
+// MODULE D
 fn fd(...){...};
-//B:
+...
+---
+// MODULE B
 require D
-//C:
+...
+---
+// MODULE C
 require D
-//A:
+...
+---
+// MODULE A
 require B
 require C
-...uses fd // refers to B.D.fd or C.D.fd???
+...(uses fd) // refers to B.D.fd or C.D.fd ???
 ```
 
 The question of whether `fd` symbol is accessed through module `B` or
 `C` (via `D`) really doesn't matter -- they end up being the same
-objects (a single assembly definition). We can say that the **full
+object (a single assembly definition). We can say that the **full
 identifier** for `fd` in the context of module `A` is indeed `D.fd` --
 the distinct import paths leading to its definition only adds
 redundancy to the "visibility" of the symbol `fd` from the perspective
-of module `A`.
+of module `A`. Summing up, *full identifiers* in plain Jasmin are
+always flat: `ModuleName.Ident`.
 
-It is intructive at this point to look at a close issue related to
+It is instructive at this point to look at a close issue related to
 *name-clashing*. If two modules (say `A` and `B`) define some `fX`,
 the compiler would emit an error (name clash of `fX`). This is solely
 a limitation of the scoping rules adopted by the syntax of the
-language, that could be handled by some name-spacing mechanism -- but
-"semantically" there would be no problem on allowing to access both
-`A.fX` and `B.fX` (here distinguished by what we have called their
-*full identifiers*).
+language (that, in turn, simplifies the naming of symbols of the
+generated code). If needed/intended, it could be handled by some
+name-spacing mechanism -- "semantically", there would be no problem
+on allowing to access both `A.fX` and `B.fX`, here distinguished by
+what we have called their *full identifiers* (but, of course, the
+compiler would need to add module prefixes to both symbols...).
 
 ## Turning to Parametric-modules
 
-When we consider parametric modules, in an example such as the above
-diamond-shaped imports, we might be talking of two distinct instances
+When we consider parametric modules, in examples such as the above
+diamond-shaped imports, we might reach two distinct instances
 of module `D`!!!
 
 ```
-//D(P):
+// MODULE D(P)
 fn fd;
-//B:
+...
+---
+// MODULE B
+...
 require D(P1)
-//C:
+...
+---
+// MODULE C
+...
 require D(P2)
-//A:
+...
+---
+// MODULE A
 require B
 require C
-fd... // ??? "fd" refers to B.D(P1).fd or C.D(P2).fd ???
+...(uses "fd") // ??? "fd" refers to B.D(B.P1).fd or C.D(C.P2).fd ???
 ```
 
-We need to decide whether `B.P1` is equal to `C.P2`, and things get much
+Now, `B.D(B.P1).fd` and `C.D(C.P2).fd` might or might not be the "same object" (we need to decide whether `B.P1` is equal to `C.P2`), and things get much
 more intricate when we allow `A, B, C` to be parametric modules
-themselves (in which case, we might be considering different instances of
-`B.P1` and `C.P2`, since they might depend on own-module
-parameters). What we can say is, in the context of some toplevel
+themselves. What we can say is, in the context of some toplevel
 (non-parametric) module such as `A`, we can assign a *full identifier*
 to all definitions possibly used by `A`. We shall extend the
-previously introduced notion of *full
-identifiers* for parametric
+previously introduced notion of *full identifiers* for parametric
 modulus such as `D` to the shape `D(p1...pn).fd`, where
 `p1..pn` are **resolved parameters**. *Resolved parameters* are
 defined according to the structure of the parameters:
  - resolved `param int` parameters are integer literals;
- - resolved `global`parameters and `fn` parameters are *full
-   identifiers*.
+ - resolved `global`parameters and `fn` parameters are the *full
+   identifiers* of that instance.
    
-In the previous example, full indentifiers could be things like
+In the previous example, full indentifiers would be things like
 `A.fa`, `B.globB`, `D(B.globB).fd`, `D(C.globC).fd`. In this example,
 the parameter for module `D` would be a global constant, and we see
 that the `fd` procedure of both instances of `D` should not be
@@ -181,292 +214,69 @@ importing a module, it **can** be assigned to a qualifier that would
 give access to the symbols defined on it.
 
 ```
-//D(P):
+// MODULE D(P)
 fn fd;
-//B:
+...
+---
+// MODULE B
+...
 require D(P1)
-//C:
+...
+---
+// MODULE C
+...
 require D(P2)
-//A:
+...
+...
+// MODULE A
 require B as QB
 require C as QC
-QB.fd or QC.fd  // qualifier is used to disambiguate between D(P1).fd or D(P2).fd
+...(uses QB.fd and QC.fd)  // qualifier is used to disambiguate between D(P1).fd or D(P2).fd
 ```
 
 **Remark:** The use of different qualified objects (e.g. `QB.fd` and
 `QC.fd` on the example above) do not necessarily means accessing to
-different objects -- they might end up being identified (e.g. if `P1`
-equals `P2`).
+different objects -- they might end up being identified (e.g. if `B.P1`
+equals `C.P2`).
 
+**Remark:** In order to preserve compatibility with (standard) Jasmin
+compiler, we restrict the use of qualifiers to parametric
+modules. Otherwise, we might need to embed a module identifier in the
+symbols of a given module (as we need to do with parametrised
+modules). Of course, that means that name-clashes on non-parametric
+modules won't be avoidable.
 
-## XXX ??? Qualifiers as restrictions
+# Processing phases for the prototype (sketch)
 
-We have seen the use of qualifiers to disambiguate different instances
-of parametric modules, but when writing code is often simpler to
-annotate where some instances are expected to be the same (and let the
-compiler enforce those identifications). Here we move to a reading of
-"qualifiers-as-restrictions", and the idea is that qualifiers are seen
-and *global* restrictions to parameters (two uses of the same
-qualifier in different parts of the program would enforce the
-corresponding parameters to match).
+ 1. Dependency Analysis
+ 2. 'Demodularisation' transformation
 
-```
-//A(P):
-//B(P):
-require A(B_AP(P)) as QA
-require C(B_CP(P))
-//C(P):
-require A(C_AP(P)) as QA
-...
-//D:
-require A(D_AP) as QA
-require B(D_BP1) as QB1
-require B(D_BP2) as QB2
-fA // A(D_AP).fA  --  shared between A, B1 and B2
-QB1.fc // C(B_CP(D_BP1)).fc
-QB2.fc // C(B_CP(D_BP2)).fc
-```
+## Current status
 
-**Remark:** without using `QA` should still work (as, in the end, all
-the instantiations resolve to a single one). But it would be less
-clear for the programmer; make error messages harder to interpret and
-debug; etc.
+Only patched the parser to support the introduced constructs, and
+corresponding command-line options.
 
-**Remark2:** a second reason for using restricting qualifiers is
-definitely more mundane -- when looking to the meaning of the
-parametric module `B`, the use of qualifiers would make it explicit
-that a single instance of module A is accessed both by `B` and
-`C`. Thus, the EC extraction mechanism would be able to generate a
-model that would be simpler and easier to reason about.
-
-## XXX ??? Qualifiers to overcome (some kinds of) name-clashes 
-
-```
-//A:
-fx
-//B:
-fx
-//C:
-require A as QA
-require B as QB
-QA.fx // refers to A.fx
-QB.fx // refers to B.fx
-```
-
-but would still not allow:
-```
-//A:
-fx
-//B:
-require A as QA
-fx
-fx // ??? refers to fx or A.fx ???
-QA.fx // refers to QA.fx
-```
-It would probably be very simple to overcome, but does not to seems to
-worth the effort -- someone writing a program that uses `A` could
-easily rename its own def. `fx` -- in the former example `A` and `B`
-might be certified third-party libraries defining some usual name (e.g. 'enc')
--- it would have a much bigger impact to get work around such a name clash...
-
-# XXX REST...
-
-In order to simplify the handling of these issues, we consider the use
-of *parameter-keys* provided by the user that would act as a global
-constraint-system.
-
-```
-//A:
-require B
-require C
-fd... // It enforces B.QD=B.P1 and C.QD=C.P2 to be the same
-      // hence, both B.D(P1).fd and C.D(P2).fd refer to the same def.
-//B:
-require D with QD=P1
-//C:
-require D with QD=P2
-//D:
-fn fd;
-```
-
-In general, the problem is slightly more complex, as parameters can be
-involved in intermediate modules...
-
-```
-//A(AP):
-require B with { PB(AP) }
-require C with { PC(AP) }
-fd... // It enforces B.QD=C.QD, that is B.P1(PB(AP)) and C.P2(PC(AP)) are the same
-      // hence, both B.D(P1).fd and C.D(P2).fd refer to the same def.
-//B(BP):
-require D with QD = {P1(BP)}
-//C(CP):
-require D with QD = {P2(CP)}
-//D:
-fn fd;
-```
-
-Here, we might allow "fd" to be used without qualifier, as the only
-visible instance is "QD.fd" -- but it should be stressed that defs. in
-module D are indeed be prefixed by "QD.". To illustrate this,
-consider that `A(AP)` also includes `require D with QDX={P3(AP)}` --
-now, `fd` needs to be prefixed by either `QD.` or `QDX.`, and the
-plain Jasmin code would be duplicated with prefixes `QD.` and `QDX.`.
-
-**Remark:** I wonder if it would be feasible to do checks on these
-possibly duplicated instances (e.g. to emit a warning...)
+repo: https://github.com/bacelar/jasmin/ (branch `deploy-modular`) --
+unfortunately with no progress since mid-November (and, sadly, with
+little chance of taking on the task before March's retreat).
 
 
 
+## Processing phase (sketch)
 
-```
-//A:
-require B
-fn fa
-//B:
-require C
-fn fb
-//C:
-fn fc
-//D:
-require A 
-require C 
-fc << A.B.fc = C.fc (same definition!)
-```
+We constrain dependencies between modules to form a DAG (i.e. we
+disallow circular or recursive dependencies).
 
-```
-//A(PA):
-require B // QCtxt: C:{QC=B.P1()}
-//B:
-require C with QC=P1  // QCtxt: C:{QC=B.P1}
-//C(PC):
-fn fc
-//D:
-require A with QA=(PA1) // QCtxt: A:{QA} B:() C:{QC=B.P1}
-require C with QC=P2 // QCtxt: QA? QB? QC (enforced QC(QA)=QC <=> B.P1=D.P2)
-fc << QA.QB?.QC.fc <?> QC.fc (they are the same, because P1=P2)
+For each module (accessed in topological order), collect:
+ 1. `module identifier`
+ 2. module parameter signature (name, kind, type)
+ 3. collect full set of dependencies (mod_qual, mod_name, reduced parameter instances)
+ 4. full set of defined symbols (including from dependencies)
+ 5. expanded code
 
-se em vez disso fosse:
-require C with QCX=P2 // QCtxt: QA? QB? QC QCX 
-fc << QA?.QB?.QC.fc <?> QCX.fc (not assumed to be the same - P1 and P2 are
-not constrained...)
+Error checks performed in the pass:
+ 1. exclude cycles on module dependencies (during preload of import-graph)
+ 2. detect conflicting names on imports (during processing require clauses)
+ 3. expand identifiers into their full-identifiers (during processing of module's code)
 
-contexts for the modules:
-C: QC=B.P1; QCX=D.P2
-D: QA=D.PA1; QB?=(); QC=QA.QB?.P1; QCX:D.P2
-
-```
-
-
-# Import of parametric modules
-
-Parametric modules **should** always be imported instantiating the
-complete set of parameters (a complete `with` clause), as specified in
-the `modsignature` declaration of the imported module (but possibly
-with own parameters...). It **can** also qualify the import, but an
-unqualified import would be treated as XXXXX (own name).
-
-```
-//A:
-require "B" with BN = {bbb} // BN=B(bbb)
-require "M" with MP = {ppp} // MP=M(ppp) -- enforce bbb=mbbb(ppp)
-require "M" with MQ = {qqq} // MQ=M(qqq) -- enforce bbb=mbbb(qqq)
-MP.F.fx vs MQ.F.fx (obs: mas eu queria MP.fx vs. MQ.fx...)
-MP.exp vs MQ.exp ( na source, qualificadores podem ser evitados quando
-existe um único módulo que "ofereça" def.
-//B (bbb):
-require "U". // BU=U()  -- qual. will be ignored upon extraction...
-//M (ppp or qqq):
-require "B" with BN = {mbbb} // BN=B(mbbb) 
-require "F" with {fff} // enforce mbbb=fbbb(fff) ={BN}
-//R:
-require "B" with {rbbb} // NÃO PODE SER (perde rastro do qualifier...)
-require "B" with BN = {rbbb}  // DEFINE key PARA RESTRIÇÕES
-//F(fparams):
-require "B" with BN = {fb} // 
-require "R" with BN = {fr} // ?enforce fb(fparams)=fr(fparams)  ??PORQUÊ???
-require "E" with ? = {eee}
-//E:
-require "B" with BN = {...}
-fn exp
-```
-
-```
-//A:
-require "B" as "BN" with {bbb} // BN=B(bbb)
-require "M" as "MP" with {ppp} // MP=M(ppp) -- enforce bbb=mbbb(ppp)
-require "M" as "MQ" with {qqq} // MQ=M(qqq) -- enforce bbb=mbbb(qqq)
-//B (bbb):
-require "U" as "BU". // BU=U()  -- qual. will be ignored upon extraction...
-//M (ppp or qqq):
-require "B" as "BN" with {mbbb} // BN=B(mbbb) 
-require "F" with {fff} // enforce mbbb=fbbb(fff)
-//R:
-require "B" with {rbbb}
-//F:
-require "B" as "BN" with {fbbb} // 
-require "R" as "BN" with {frrr} // ?enforce fbbb=rbbb(frrr)  ??PORQUÊ???
-require "E" with {eee}
-```
-
-Critically, qualifiers in parametric imports would be
-linked to the contents of the `with` clause. That is, qualifiers could
-be reused (in different import clauses), but each qualifier should
-be in correspondence with the parameter instantiations.
-
-
-
-# Qualifiers in `require` clause
-
-A `require` clause **can** add a qualifier (with `as <qual>`) when
-importing both parametric (with `with` clause) and non-parametric
-modules. But it should be noted that the primary intent of qualifiers
-is to specify how we access declarations of the imported module on the
-source program, and not directly related to "identity" of those
-declarations. This is specifically relevant when importing
-non-parametric modules. Consider the following scenario:
-
-```
-// module A
-u64 a = 33;
-require "B" as "QB"
-...
-// module B
-u64 a = 22;
-...
-```
-the compiler **should** emit a "name clash" error. The rational being
-that the name `a` is taken by module `A`, and qualifier `QB` only
-makes the symbols in `B` accessible as `QB.*` in the source code --
-does not duplicate them...
-
-**Remark:** The last restriction could be avoided if one considers a
-unique *module identifier* for each (non-parametric) module. It could
-be either implicit (e.g. filename) or given in the module preamble
-(e.g. `moduleId "XPTO"`) -- that *module identifier* would prefix
-every name defined on the module, and hence would avoid the
-aforementioned name-clash (there, qualifiers would allow to
-disambiguate which definition is intended...).
-
-```
-// module A
-require "B"
-require "C" as "QC" /* OK, but with two clones of "C" ??? */
-...
-// module B
-require "C"
-```
-
-
-
-# Name prefixing and name clashing
-
-
-Parametric modules can be instantiated multiple times. That means that
-declarations in those module instances (constants/functions) need
-to be compiled into different objects. We shall use prefixes with the
-*qualifier path* from the innermost non-parametric module.
-
-- Declarations inside a parametric module **shall** be prefixed with
-  the corresponding *qualifier path*;
   

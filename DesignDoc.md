@@ -267,6 +267,18 @@ little chance of taking on the task before March's retreat).
 We constrain dependencies between modules to form a DAG (i.e. we
 disallow circular or recursive dependencies).
 
+The processing is splitted in three passes:
+
+ 1. Pass I -- Construct the dependency graph;
+ 2. Pass II -- Consistency check and turn all names qualified;
+ 3. Pass III -- inline parametric modules;
+
+Extraction into EC (`-mEC` option) only performs the first two passes -- that is, extraction occurs at the output of pass II. Up to this stage, the toplevel module is allowed to be parametric.
+For Pass III we further imporse that the toplevel module is non-parametric (otherwise, there would remain unresolved parameters).
+
+
+
+
 For each module (accessed in topological order), collect:
  1. `module identifier`
  2. module parameter signature (name, kind, type)

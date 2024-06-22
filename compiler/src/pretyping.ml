@@ -2146,13 +2146,33 @@ let rec tt_item arch_info (env : 'asm Env.env) pt : 'asm Env.env =
   | S.PGlobal pg -> tt_global arch_info.pd env (L.loc pt) pg
   | S.Pexec   pf ->
     Env.Exec.push (L.loc pt) (fst (tt_fun env pf.pex_name)).P.f_name pf.pex_mem env
-  | S.Prequire (from, fs) ->
+  | S.Prequire (from, fs, None) ->
     List.fold_left (tt_file_loc arch_info from) env fs
+  | S.Prequire (from, fs, Some name) ->
+      hierror
+        ~loc:Lnone
+        ~kind:"internal error (mjazz)"
+        "qualified imports are only supported in `-mjazz` mode"     
   | S.PNamespace (ns, items) ->
      let env = Env.enter_namespace env ns in
      let env = List.fold_left (tt_item arch_info) env items in
      let env = Env.exit_namespace env in
      env
+  | S.PModule (_, _, _) ->
+      hierror
+        ~loc:Lnone
+        ~kind:"internal error (mjazz)"
+        "modules only supported in `-mjazz` mode"     
+  | S.PModuleApp (_, _, _) ->
+      hierror
+        ~loc:Lnone
+        ~kind:"internal error (mjazz)"
+        "modules only supported in `-mjazz` mode"     
+  | S.POpen _ ->
+      hierror
+        ~loc:Lnone
+        ~kind:"internal error (mjazz)"
+        "open clause only supported in `-mjazz` mode"     
 
 and tt_file_loc arch_info from env fname =
   fst (tt_file arch_info env from (Some (L.loc fname)) (L.unloc fname))

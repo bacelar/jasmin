@@ -9,6 +9,7 @@ let debug = ref false
 let timings = ref false
 let print_list = ref []
 let print_liveness = ref false
+let modular_jazz = ref false
 let ecfile = ref ""
 let ec_list = ref []
 let ec_array_path = ref Filename.current_dir_name
@@ -180,6 +181,7 @@ let options = [
     "-nolea"   , Arg.Clear lea         , " Try to use add and mul instead of lea";
     "-set0"     , Arg.Set set0          , " Use [xor x x] to set x to 0 (default is not)";
     "-noset0"   , Arg.Clear set0        , " Do not use set0 option";
+    "-mjazz"   , Arg.Set modular_jazz, ": support Jasmin modules (experimental)";
     "-ec"       , Arg.String  set_ec    , "[f] Extract function [f] and its dependencies to an easycrypt file";
     "-oec"     ,  Arg.Set_string ecfile , "[filename] Use filename as output destination for easycrypt extraction";
     "-oecarray" , Arg.String set_ec_array_path, "[dir] Output easycrypt array theories to the given path";

@@ -386,18 +386,43 @@ let pp_global fmt { pgd_type ; pgd_name ; pgd_val } =
 let pp_path fmt s =
   F.fprintf fmt "%S " (L.unloc s)
 
+let pp_modsig fmt msig =
+  let pp_modsigparam fmp p =
+    indent fmt 1;
+    match p with
+    | MSparam (t,i) -> F.fprintf fmt "%a %a %a;" kw "param" pp_type t dname (L.unloc i)
+    | MSglob (t,i) -> F.fprintf fmt "%a %a %a;" kw "global" pp_type t dname (L.unloc i)
+    | MSfn (f,targ,[]) -> F.fprintf fmt "%a %a (%a);" kw "fn" dname (L.unloc f) (pp_list ", " pp_type) targ
+    | MSfn (f,targ,tres) -> F.fprintf fmt "%a %a (%a) -> %a;" kw "fn" dname (L.unloc f) (pp_list ", " pp_type) targ (pp_list ", " pp_type) tres
+  in if not (List.is_empty msig)
+     then (F.fprintf fmt "%a " kw "with";
+           indent fmt 1;
+           (pp_list eol pp_modsigparam) fmt msig;
+           F.fprintf fmt eol)
+
+let rec pp_modpexpr fmt = function
+  | MPid name -> pp_var fmt name
+  | MPint i -> F.fprintf fmt "%a" Z.pp_print i
+  | MPplus (e1,e2) -> F.fprintf fmt "(%a+%a)" pp_modpexpr e1 pp_modpexpr e2
+  | MPmult (e1,e2) -> F.fprintf fmt "(%a*%a)" pp_modpexpr e1 pp_modpexpr e2
+
 let rec pp_pitem fmt pi =
   match L.unloc pi with
   | PFundef f -> pp_fundef fmt f
   | PParam p  -> pp_param fmt p
   | PGlobal g -> pp_global fmt g
   | Pexec _   -> ()
-  | Prequire (from, s) ->
+  | Prequire (from, s, name) ->
     let pp_from fmt =
       Option.may (fun name ->
-          F.fprintf fmt "%a %s " kw "from" (L.unloc name)) in
+          F.fprintf fmt "%a %s " kw "from" (L.unloc name))
+    and pp_as fmt =
+      Option.may (fun name ->
+          F.fprintf fmt "%a %s " kw "as" (L.unloc name))
+    in
       F.fprintf fmt "%a%a " pp_from from kw "require";
       List.iter (pp_path fmt) s;
+      F.fprintf fmt "%a " pp_as name;
       F.fprintf fmt eol
   | PNamespace (ns, pis) ->
      (* TODO: ident within namespaces? *)
@@ -408,6 +433,25 @@ let rec pp_pitem fmt pi =
      F.fprintf fmt eol;
      closebrace fmt ();
      F.fprintf fmt eol
+  | PModule (mn, msig, pis) ->
+     (* TODO: ident within modules? *)
+     F.fprintf fmt "%a %s " kw "module" (L.unloc mn);
+     pp_modsig fmt msig;
+     openbrace fmt ();
+     F.fprintf fmt eol;
+     List.iter (pp_pitem fmt) pis;
+     F.fprintf fmt eol;
+     closebrace fmt ();
+     F.fprintf fmt eol
+  | PModuleApp (name, mname, margs) ->
+     F.fprintf fmt "%a %s = %s(%a);"
+       kw "module"
+       (L.unloc name)
+       (L.unloc mname)
+       (pp_list ", " (fun fmt e -> pp_modpexpr fmt e)) margs
+  | POpen name ->
+     F.fprintf fmt "%a %s;" kw "open" (L.unloc name)
+
 
 let pp_prog fmt =
   List.iter (F.fprintf fmt "%a" pp_pitem)

@@ -87,19 +87,19 @@ type module_ctxt = module_name list
 type fromkey = A.symbol option
 type filename = String.t
 
-  let add_from idir from_map (name, filename) = 
-    let p = Path.of_string filename in 
-    let ap = 
-      if Path.is_absolute p then p
-      else Path.concat idir p in  
-    begin match Map.find name from_map with
-    | ap' -> 
-      if ap <> ap' then 
-        hierror ~loc:Lnone ~kind:"compilation" "cannot bind %s with %s it is already bound to %s"
-          name (Path.to_string ap) (Path.to_string ap')
-    | exception Not_found -> ()
-    end;
-    Map.add name ap from_map
+let add_from idir from_map (name, filename) = 
+  let p = Path.of_string filename in 
+  let ap = 
+    if Path.is_absolute p then p
+    else Path.concat idir p in  
+  begin match Map.find name from_map with
+  | ap' -> 
+    if ap <> ap' then 
+      hierror ~loc:Lnone ~kind:"compilation" "cannot bind %s with %s it is already bound to %s"
+        name (Path.to_string ap) (Path.to_string ap')
+  | exception Not_found -> ()
+  end;
+  Map.add name ap from_map
 
 type fmodule_info =
   { fmod_ast  : Syntax.pprogram
@@ -113,8 +113,8 @@ let empty_fmenv = { fm_env = Map.empty; fm_topsort = [] }
 
 let pp_fmenv fmt env =
   let pp_entry fmt modname =
-    F.fprintf fmt "@[<v 2>fm_env:@,%s \n %a \n@]\n"
-      modname
+    F.fprintf fmt "\n//=============  %s  =============\n" modname;
+    F.fprintf fmt "%a \n"
       (Syntax_printer.pp_prog) (Map.find modname env.fm_env).fmod_ast in
   F.fprintf fmt "@[<v 2>fm_topsort:@,%a@]\n"
                (Utils.pp_list ", " F.pp_print_string) env.fm_topsort;

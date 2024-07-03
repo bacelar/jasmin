@@ -2178,7 +2178,7 @@ and tt_file_loc arch_info ~preloaded from env fname =
   fst (tt_file arch_info ~preloaded env from (Some (L.loc fname)) (L.unloc fname))
 
 and tt_file arch_info ?(preloaded=Map.empty) env from loc fname =
-  let fmodule = fname (* include also "from"?? *) in
+  let fmodule = Proc_mjazz.fmodule_name from fname in
   match Map.find_opt fmodule preloaded, Env.enter_file env from loc fname with
   | _, None -> env, []
   | Some ast, Some(env, fname) ->

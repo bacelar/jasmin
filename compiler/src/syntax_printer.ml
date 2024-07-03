@@ -9,7 +9,7 @@ module L = Location
 
 type ('a, 'b, 'c, 'd) str = ('a, 'b, 'c, 'd, 'd, 'a) CamlinternalFormatBasics.format6
 
-let eol : _ str = "\\\\\n"
+let eol : _ str = "\n"
 
 let kw fmt arg = F.fprintf fmt "%s" arg
 let ptype fmt arg = F.fprintf fmt "%s" arg

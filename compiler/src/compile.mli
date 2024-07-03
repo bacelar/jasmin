@@ -12,8 +12,14 @@ val preprocess : wsize -> 'asm asmOp -> (unit, 'asm) pprog -> (unit, 'asm) prog
   Raises `Typing.TyError`.
  *)
 
+val proc_mjazz : 
+  ('reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op) Pretyping.arch_info ->
+  string ->
+  (string, Syntax.pprogram) Utils.Map.t
+
 val parse_file :
   ('reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op) Pretyping.arch_info ->
+  ?preloaded:(string, Syntax.pprogram) Utils.Map.t ->
   string ->
   ('reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op) Arch_extra.extended_op
   Pretyping.Env.env

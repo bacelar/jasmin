@@ -181,7 +181,7 @@ let options = [
     "-nolea"   , Arg.Clear lea         , " Try to use add and mul instead of lea";
     "-set0"     , Arg.Set set0          , " Use [xor x x] to set x to 0 (default is not)";
     "-noset0"   , Arg.Clear set0        , " Do not use set0 option";
-    "-mjazz"   , Arg.Set modular_jazz, ": support Jasmin modules (experimental)";
+    "-mjazz"   , Arg.Set modular_jazz   , " Support Jasmin modules (experimental)";
     "-ec"       , Arg.String  set_ec    , "[f] Extract function [f] and its dependencies to an easycrypt file";
     "-oec"     ,  Arg.Set_string ecfile , "[filename] Use filename as output destination for easycrypt extraction";
     "-oecarray" , Arg.String set_ec_array_path, "[dir] Output easycrypt array theories to the given path";

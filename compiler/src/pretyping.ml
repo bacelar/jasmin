@@ -2139,7 +2139,7 @@ let tt_global pd (env : 'asm Env.env) _loc (gd: S.pglobal) : 'asm Env.env =
   Env.Vars.push_global env (x,d)
 
 (* -------------------------------------------------------------------- *)
-let rec tt_item arch_info (env : 'asm Env.env) pt : 'asm Env.env =
+let rec tt_item arch_info ~preloaded (env : 'asm Env.env) pt : 'asm Env.env =
   match L.unloc pt with
   | S.PParam  pp -> tt_param  arch_info.pd env (L.loc pt) pp
   | S.PFundef pf -> tt_fundef arch_info env (L.loc pt) pf
@@ -2147,7 +2147,7 @@ let rec tt_item arch_info (env : 'asm Env.env) pt : 'asm Env.env =
   | S.Pexec   pf ->
     Env.Exec.push (L.loc pt) (fst (tt_fun env pf.pex_name)).P.f_name pf.pex_mem env
   | S.Prequire (from, fs, None) ->
-    List.fold_left (tt_file_loc arch_info from) env fs
+    List.fold_left (tt_file_loc arch_info ~preloaded from) env fs
   | S.Prequire (from, fs, Some name) ->
       hierror
         ~loc:Lnone
@@ -2155,7 +2155,7 @@ let rec tt_item arch_info (env : 'asm Env.env) pt : 'asm Env.env =
         "qualified imports are only supported in `-mjazz` mode"     
   | S.PNamespace (ns, items) ->
      let env = Env.enter_namespace env ns in
-     let env = List.fold_left (tt_item arch_info) env items in
+     let env = List.fold_left (tt_item arch_info ~preloaded) env items in
      let env = Env.exit_namespace env in
      env
   | S.PModule (_, _, _) ->
@@ -2174,26 +2174,29 @@ let rec tt_item arch_info (env : 'asm Env.env) pt : 'asm Env.env =
         ~kind:"internal error (mjazz)"
         "open clause only supported in `-mjazz` mode"     
 
-and tt_file_loc arch_info from env fname =
-  fst (tt_file arch_info env from (Some (L.loc fname)) (L.unloc fname))
+and tt_file_loc arch_info ~preloaded from env fname =
+  fst (tt_file arch_info ~preloaded env from (Some (L.loc fname)) (L.unloc fname))
 
-and tt_file arch_info env from loc fname =
-  match Env.enter_file env from loc fname with
-  | None -> env, []
-  | Some(env, fname) ->
-    let ast   = Parseio.parse_program ~name:fname in
+and tt_file arch_info ?(preloaded=Map.empty) env from loc fname =
+  let fmodule = fname (* include also "from"?? *) in
+  match Map.find_opt fmodule preloaded, Env.enter_file env from loc fname with
+  | _, None -> env, []
+  | Some ast, Some(env, fname) ->
+    List.fold_left (tt_item arch_info ~preloaded) env ast, ast
+  | None, Some(env, fname) ->
+    let ast = Parseio.parse_program ~name:fname in
     let ast =
       try BatFile.with_file_in fname ast
       with Sys_error(err) ->
         let loc = Option.map_default (fun l -> Lone l) Lnone loc in
         hierror ~loc ~kind:"typing" "error reading file %S (%s)" fname err
     in
-    let env   = List.fold_left (tt_item arch_info) env ast in
+    let env   = List.fold_left (tt_item arch_info ~preloaded) env ast in
     Env.exit_file env, ast
 
 (* -------------------------------------------------------------------- *)
-let tt_program arch_info (env : 'asm Env.env) (fname : string) =
-  let env, ast = tt_file arch_info env None None fname in
+let tt_program arch_info ?(preloaded=Map.empty) (env : 'asm Env.env) (fname : string) =
+  let env, ast = tt_file arch_info ~preloaded env None None fname in
   env, Env.decls env, ast
 
 (* FIXME :

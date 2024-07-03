@@ -54,7 +54,7 @@
     "export", EXPORT ;
     "ArrayInit", ARRAYINIT;
     "_"     , UNDERSCORE;
-  ] @ if !Glob_options.modular_jazz (* additional keywords with `-mjazz` *)
+  ] @ if true (* !Glob_options.modular_jazz (* additional keywords with `-mjazz` *) *)
       then [ "open", OPEN;
              "as", AS;
              "with", WITH; 

@@ -11,12 +11,26 @@ let preprocess reg_size asmOp p =
 
 (* -------------------------------------------------------------------- *)
 
-let parse_file arch_info fname =
+let proc_mjazz arch_info fname =
+  let idir = BatPathGen.OfString.of_string (Sys.getcwd ()) in
+  let from_map = List.fold_left (Proc_mjazz.add_from idir)
+                                Map.empty !Glob_options.idirs in
+  let fmenv = Proc_mjazz.visit_file from_map [] Proc_mjazz.empty_fmenv 
+                                    ([], None, None, fname, None) in
+  if !Glob_options.debug
+     then (Printf.eprintf "Preloaded ASTs: \n %!";
+           Format.printf "%a\n" Proc_mjazz.pp_fmenv fmenv);
+  let preloaded = Map.map (fun mi -> mi.Proc_mjazz.fmod_ast) fmenv.fm_env in
+  preloaded
+  
+(* -------------------------------------------------------------------- *)
+
+let parse_file arch_info ?(preloaded=Map.empty) fname =
   let env =
     List.fold_left Pretyping.Env.add_from Pretyping.Env.empty
       !Glob_options.idirs
   in
-  Pretyping.tt_program arch_info env fname
+  Pretyping.tt_program arch_info ~preloaded env fname
 
 (* -------------------------------------------------------------------- *)
 let rec warn_extra_i pd asmOp i =

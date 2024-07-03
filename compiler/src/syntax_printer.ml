@@ -1,4 +1,4 @@
-(* * Pretty-print Jasmin program (concrete syntax) as LATEX fragments *)
+(* * Pretty-print Jasmin program (concrete syntax) (TODO: FIX THIS...) *)
 
 open Utils
 open Annotations
@@ -11,20 +11,16 @@ type ('a, 'b, 'c, 'd) str = ('a, 'b, 'c, 'd, 'd, 'a) CamlinternalFormatBasics.fo
 
 let eol : _ str = "\\\\\n"
 
-let latex cmd fmt arg =
-  F.fprintf fmt "\\jasmin%s{%s}" cmd arg
+let kw fmt arg = F.fprintf fmt "%s" arg
+let ptype fmt arg = F.fprintf fmt "%s" arg
+let dname fmt arg = F.fprintf fmt "%s" arg
+let arrow fmt () = F.fprintf fmt "->"
+let sharp fmt () = F.fprintf fmt "#"
+let openbrace fmt () = F.fprintf fmt "{"
+let closebrace fmt () = F.fprintf fmt "}"
 
-let symbol s fmt () = latex s fmt ""
-
-let kw = latex "kw"
-let ptype = latex "type"
-let dname = latex "dname"
-let arrow = symbol "arrow"
-let sharp fmt () = F.fprintf fmt "\\#"
-let openbrace fmt () = F.fprintf fmt "\\{"
-let closebrace fmt () = F.fprintf fmt "\\}"
-
-let indent fmt d = if d > 0 then latex "indent" fmt (string_of_int d)
+let ident_spaces = 2
+let indent fmt d = if d > 0 then F.fprintf fmt "%s" (String.make (d*ident_spaces) (Char.chr 32))
 
 let pp_opt p fmt =
   function
@@ -218,7 +214,7 @@ let pp_pointer = function
   
   
 let pp_storage fmt s =
-  latex "storageclass" fmt
+  F.fprintf fmt "%s"
     (match s with
      | `Reg(ptr) -> "reg" ^ (pp_pointer ptr)
      | `Stack ptr -> "stack" ^ (pp_pointer ptr)
@@ -407,6 +403,7 @@ let rec pp_modpexpr fmt = function
   | MPmult (e1,e2) -> F.fprintf fmt "(%a*%a)" pp_modpexpr e1 pp_modpexpr e2
 
 let rec pp_pitem fmt pi =
+  F.fprintf fmt eol;
   match L.unloc pi with
   | PFundef f -> pp_fundef fmt f
   | PParam p  -> pp_param fmt p

@@ -108,8 +108,25 @@ let main () =
         | Some conf -> SafetyConfig.load_config conf
         | None -> () in
 
+    let preloaded = 
+      if !Glob_options.modular_jazz
+      then
+        try Compile.proc_mjazz Arch.arch_info infile
+        with
+        | Annot.AnnotationError (loc, code) -> hierror ~loc:(Lone loc) ~kind:"annotation error" "%t" code
+        | Proc_mjazz.MjazzError (loc, code) -> hierror ~loc:(Lone loc) ~kind:"mjazz typing error" "%a" Proc_mjazz.pp_mjazzerror code
+        | Syntax.ParseError (loc, msg) ->
+            let msg =
+              match msg with
+              | None -> "unexpected token" (* default message *)
+              | Some msg -> msg
+            in
+            hierror ~loc:(Lone loc) ~kind:"parse error" "%s" msg
+      else Map.empty 
+    in
+
     let env, pprog, ast =
-      try Compile.parse_file Arch.arch_info infile
+      try Compile.parse_file Arch.arch_info ~preloaded infile
       with
       | Annot.AnnotationError (loc, code) -> hierror ~loc:(Lone loc) ~kind:"annotation error" "%t" code
       | Pretyping.TyError (loc, code) -> hierror ~loc:(Lone loc) ~kind:"typing error" "%a" Pretyping.pp_tyerror code

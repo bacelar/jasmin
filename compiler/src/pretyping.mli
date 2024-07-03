@@ -52,6 +52,7 @@ type ('a, 'b, 'c, 'd, 'e, 'f, 'g) arch_info = {
 
 val tt_item :
   ('a, 'b, 'c, 'd, 'e, 'f, 'g) arch_info ->
+  preloaded:(string, Syntax.pprogram) Utils.Map.t ->
   ('a, 'b, 'c, 'd, 'e, 'f, 'g) Arch_extra.extended_op Env.env ->
   Syntax.pitem Location.located ->
   ('a, 'b, 'c, 'd, 'e, 'f, 'g) Arch_extra.extended_op Env.env
@@ -76,6 +77,7 @@ val tt_fun :
 
 val tt_program :
   ('a, 'b, 'c, 'd, 'e, 'f, 'g) arch_info ->
+  ?preloaded:(string, Syntax.pprogram) Utils.Map.t ->
   ('a, 'b, 'c, 'd, 'e, 'f, 'g) Arch_extra.extended_op Env.env ->
   string ->
   ('a, 'b, 'c, 'd, 'e, 'f, 'g) Arch_extra.extended_op Env.env
@@ -85,6 +87,7 @@ val tt_program :
 
 val tt_file :
   ('a, 'b, 'c, 'd, 'e, 'f, 'g) arch_info ->
+  ?preloaded:(string, Syntax.pprogram) Utils.Map.t ->
   ('a, 'b, 'c, 'd, 'e, 'f, 'g) Arch_extra.extended_op Env.env ->
   Annotations.pident option ->
   Location.t option ->

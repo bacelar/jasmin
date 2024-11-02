@@ -1,0 +1,6 @@
+param int p = 2;
+
+require "c.jazz"
+
+export fn g() -> reg u64 { reg u64 x; x = q; return x; }
+ 

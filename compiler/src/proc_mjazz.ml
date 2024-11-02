@@ -84,7 +84,7 @@ let pp_mjazzerror fmt (code : mjazzerror) =
 type qualifier = A.symbol
 type module_name = A.symbol
 type module_ctxt = module_name list
-type fromkey = A.symbol option
+type fromkey = A.symbol L.located option
 type filename = String.t
 
 let add_from idir from_map (name, filename) = 
@@ -120,30 +120,54 @@ let pp_fmenv fmt env =
                (Utils.pp_list ", " F.pp_print_string) env.fm_topsort;
   F.fprintf fmt "%a" (Utils.pp_list "\n" pp_entry) (env.fm_topsort)
 
+(*
+from, fname, Some (mctxt::modname)
+
+require "F" => open F
+require "F" as X => (nothing)
+*)
 let rec collect_deps mctxt deps = function
-  | [] -> deps
+  | [] -> deps, []
   | x::xs ->
       match L.unloc x with
       | S.Prequire (from, fnames, None) ->
-          collect_deps
-            mctxt
-            (List.fold_left (fun l name -> (mctxt, from, Some (L.loc name), L.unloc name, None)::l) deps fnames)
-            xs
+          let deps, rest = collect_deps mctxt deps xs
+          in List.fold_left (fun l name -> (mctxt, from, Some (L.loc name), L.unloc name, None)::l) deps fnames
+             , List.fold_left (fun l name -> L.mk_loc (L.loc x) (S.POpen (L.mk_loc L._dummy (fmodule_name from (L.unloc name))))::l) rest fnames
       | S.Prequire (from, name::[], qual) ->
-          collect_deps mctxt ((mctxt, from, Some (L.loc name), L.unloc name, qual)::deps) xs
-      | S.PModule (name, _, body) ->
-          collect_deps
-            mctxt
-            (collect_deps (L.unloc name :: mctxt) deps body)
-            xs
+          collect_deps mctxt ((mctxt, from, Some (L.loc name), L.unloc name, Option.map L.unloc qual)::deps) xs
+      | S.Prequire (from, name::_, qual) ->
+          hierror ~loc:(Lone (L.loc name)) ~kind:"syntax" 
+            "(mjazz) unexpected multiple files with qualifier: \"%s\"" 
+            (L.unloc name)
+      | S.PModule (name, qual, body) ->
+          let inner_deps, inner_rest = collect_deps (L.unloc name :: mctxt) deps body
+          in let deps, rest = collect_deps mctxt inner_deps xs
+          in deps, L.mk_loc (L.loc x) (S.PModule (name, qual, inner_rest))::rest
       | S.PNamespace (name, _) ->
           hierror ~loc:(Lone (L.loc name)) ~kind:"syntax" 
             "unexpected namespace in mjazz-mode: \"%s\"" 
             (L.unloc name)
-      | _ -> collect_deps mctxt deps xs
+      | _ -> let deps, rest = collect_deps mctxt deps xs
+             in deps, (x::rest)
 
 
 
+(* pass0:
+    - load & parse dependencies
+    - detect circular dependencies
+    - topological sorting of fmodules
+    - move requires upfront:
+      + [in A] requires "F" ==> open F; (toplevel: requires "F" as F)
+      + [in A] requires "F" as X ==> alias A::X = F (toplevel: requires "F" as F)
+*)
+
+let add_require ast (mctxt, from, loc, fname, qual) =
+  let loc = match loc with None -> L._dummy | Some loc -> loc in
+  let modname = L.mk_loc loc (fmodule_name from fname) in
+  match qual with
+  | None -> L.mk_loc loc (S.Prequire (from, [L.mk_loc loc fname], Some modname))::ast
+  | Some qual -> L.mk_loc loc (S.Prequire (from, [L.mk_loc loc fname], Some modname))::ast
 
 let rec visit_file from_map visited env (mctxt, from, loc, fname, qual) =
   let modname = fmodule_name from fname in
@@ -160,41 +184,99 @@ let rec visit_file from_map visited env (mctxt, from, loc, fname, qual) =
         try Map.find (L.unloc name) from_map 
         with Not_found ->
           rs_mjazzerror ~loc:(L.loc name) (string_error "unknown name %s" (L.unloc name)) in
-  let p = if Path.is_absolute p then p
-          else Path.concat current_dir p in
-  let p = Path.normalize_in_tree p in
-  let ap = if Path.is_absolute p then p
-           else (* ?deadcode? *) Path.concat (snd (BatList.last visited)) p in
-  let ap = Path.normalize_in_tree ap in
-  (if Option.is_some (List.find_opt (fun x -> String.equal modname (fst x)) visited)
-   then hierror ~loc:ploc ~kind:"dependencies"
-      "circular dependency detected on module \"%s\"" 
-      modname);
-  match Map.find_opt modname env.fm_env with
-  | Some _ ->
-      if !Glob_options.debug then Printf.eprintf "reusing AST for \"%s\" \n%!" modname;
-      env
-  | None -> let ast = Parseio.parse_program ~name:fname in
-            let ast = try BatFile.with_file_in fname ast
-                 with Sys_error(err) ->
-                   let loc = Option.map_default (fun l -> Lone l) Lnone loc in
-                   hierror ~loc ~kind:"typing" "error reading file %S (%s)" fname err
-            in let env = { env with fm_env = Map.add modname { fmod_ast = ast; fmod_deps = [] } env.fm_env}
-            in let deps = collect_deps [modname] [] ast
-            in let env = List.fold_left (visit_file from_map ((modname, ap)::visited)) env deps
-            in {env with fm_topsort = modname::env.fm_topsort}
+        let p = if Path.is_absolute p then p
+                else Path.concat current_dir p in
+        let p = Path.normalize_in_tree p in
+        let ap = if Path.is_absolute p then p
+                 else (* ?deadcode? *) Path.concat (snd (BatList.last visited)) p in
+        let ap = Path.normalize_in_tree ap in
+        (if Option.is_some (List.find_opt (fun x -> String.equal modname (fst x)) visited)
+         then hierror ~loc:ploc ~kind:"dependencies"
+                      "circular dependency detected on module \"%s\"" 
+                      modname);
+        match Map.find_opt modname env.fm_env with
+        | Some _ ->
+            if !Glob_options.debug then Printf.eprintf "reusing AST for \"%s\" \n%!" modname;
+            env
+        | None -> let ast = Parseio.parse_program ~name:fname in
+                  let ast = try BatFile.with_file_in fname ast
+                            with Sys_error(err) ->
+                              let loc = Option.map_default (fun l -> Lone l) Lnone loc in
+                              hierror ~loc ~kind:"typing" "error reading file %S (%s)" fname err
+                            in let deps, ast = collect_deps [modname] [] ast
+                            in let ast = List.fold_left add_require ast deps
+                            in let env = { env with fm_env = Map.add modname { fmod_ast = ast; fmod_deps = deps } env.fm_env}
+                            in let env = List.fold_left (visit_file from_map ((modname, ap)::visited)) env deps
+                  in {env with fm_topsort = modname::env.fm_topsort}
 
 
 
-(* pass0:
-    - load & parse dependencies
-    - detect circular dependencies
-    - topological sorting of fmodules
+
+(* pass1: Name resolution (following the topological ordering)
+    - move requires to the top fo file (top-level dependencies)
+(A::B, Some "Libjbn", Some loc, filename, Some qual)
+from Libjbn require filename as modname
+((mctxt, from, Some (L.loc name), L.unloc name, qual)::deps)
+
+    - manage namespaces and visibility:
+      + handle open clauses
+      + resolve symbols:
+        * non-qualified:
+          - search in the own symtable
+          - lookup in the visible symtable
+        * qualified:
+          - lookup at the module aliases
+          - resolve the unqualified symbol in the module
+
+Env:
+ - key: symbol name (fully-qualified)
+ - value: ???
+
+Modules Map:
+ - key: module name (fully-qualified)
+ - value:
+   + mod_ctxt: module name (fully-qualified)
+   + symbolMap: key: symbol_name, value: unit(type, etc.)
+   + vsymbolMap: key: symbol_name, value: module_name // visible symbols
+   + 
+
 *)
 
+(**
+type module_info =
+  { mod_ctxt: A.symbol                        (* module parent *)
+  ; mod_parms: A.symbol list                  (* module parameters *)
+  ; mod_body: Syntax.pprogram                 (* module body *)
+  ; mod_symbtab : (A.symbol, unit) Map.t      (* symbol table *)
+  ; mod_vsymbtab : (A.symbol, A.symbol) Map.t (* symbol -> module *)
+  ; mod_aliases : (A.symbol, A.symbol) Map.t  (* alias -> module *)
+  }
+**)
 
-(* pass1: (following the topological ordering)
-    - top-level dependencies
-    - manage namespaces and visibility
-*)
+(**
+let add_param pp symbt =
+  let param = L.unloc pp.S.ppa_name in 
+  match Map.find_opt global symbt with
+  | None -> Map.add global () symbt
+  | Some _ -> hierror ~loc:(Lone (L.loc pg.S.ppa_name)) ~kind:"typing" "param %s already defined" global
 
+let add_global pg symbt =
+  let global = L.unloc pg.S.pgd_name in 
+  match Map.find_opt global symbt with
+  | None -> Map.add global () symbt
+  | Some _ -> hierror ~loc:(Lone (L.loc pg.S.pgd_name)) ~kind:"typing" "symbol %s already defined" global
+  
+let add_fundef fd loc symbt =
+  let fname = L.unloc fd.S.pdf_name in
+  match Map.find_opt fname symbt with
+  | None -> Map.add fname () symbt
+  | Some _ -> hierror ~loc:(Lone (L.loc pg.S.pdf_name)) ~kind:"typing" "function %s already defined" fname
+
+let rec resolve_item ctxt lnames env = function
+
+type modtable = 
+  { mtab_env : (A.symbol, module_info) Map.t
+  ; mtab_vis : (A.symbol, A.symbol) Map.t
+  }
+
+**)
